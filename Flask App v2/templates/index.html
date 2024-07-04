@@ -1,0 +1,109 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Virtualization Chatbot</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+    <link href="https://fonts.googleapis.com/css2?family=Noto+Serif&display=swap" rel="stylesheet">
+</head>
+<body>
+    <header>
+        <div class="header-left"></div>
+        <div class="header-center">
+            <h1>Virtualization Chatbot</h1>
+        </div>
+        <div class="header-right">
+            <span>{{ user_name }}</span>
+            <img src="{{ url_for('static', filename='person.svg') }}" alt="Profile Icon" class="profile-icon">
+        </div>
+    </header>
+    
+    <main>
+        <div class="chat-container">
+            <div class="options">
+                <button class="option">Generate Ideas</button>
+                <button class="option">Visualize Trends</button>
+                <button class="option">Analyze Data</button>
+                <button class="option">Report Insights</button>
+            </div>
+            
+            <div class="chat-box">
+                <div id="chat-output"></div>
+                <div class="chat-input-container">
+                    <div class="chat-input">
+                        <input type="file" id="file-input" style="display: none;">
+                        <button id="attach-btn">
+                            <img src="{{ url_for('static', filename='attach.svg') }}" alt="Attach file">
+                        </button>
+                        <input type="text" id="user-input" placeholder="How can I help you today?">
+                        <button id="send-btn">
+                            <img src="{{ url_for('static', filename='arrow.svg') }}" alt="Send message">
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </main>
+    
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            const attachBtn = document.getElementById('attach-btn');
+            const fileInput = document.getElementById('file-input');
+            const sendBtn = document.getElementById('send-btn');
+            const userInput = document.getElementById('user-input');
+            const chatOutput = document.getElementById('chat-output');
+    
+            // Handle file attachment
+            attachBtn.addEventListener('click', function() {
+                fileInput.click();
+            });
+    
+            fileInput.addEventListener('change', function(e) {
+                if (e.target.files.length > 0) {
+                    const fileName = e.target.files[0].name;
+                    userInput.value += `[Attached: ${fileName}]`;
+                }
+            });
+    
+            // Handle sending messages
+            sendBtn.addEventListener('click', sendMessage);
+            userInput.addEventListener('keypress', function(e) {
+                if (e.key === 'Enter') {
+                    sendMessage();
+                }
+            });
+    
+            function sendMessage() {
+                const message = userInput.value.trim();
+                if (message) {
+                    // Display user message
+                    chatOutput.innerHTML += `<div class="user-message">${message}</div>`;
+                    
+                    // Send message to server
+                    fetch('/chat', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                        },
+                        body: JSON.stringify({ message: message }),
+                    })
+                    .then(response => response.json())
+                    .then(data => {
+                        // Display bot response
+                        chatOutput.innerHTML += `<div class="bot-response">${data.response}</div>`;
+                        chatOutput.scrollTop = chatOutput.scrollHeight;
+                    })
+                    .catch((error) => {
+                        console.error('Error:', error);
+                    });
+    
+                    // Clear input
+                    userInput.value = '';
+                    fileInput.value = ''; // Clear file input
+                }
+            }
+        });
+    </script>
+</body>
+</html>
