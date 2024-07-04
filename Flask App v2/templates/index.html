@@ -11,7 +11,7 @@
     <header>
         <div class="header-left"></div>
         <div class="header-center">
-            <h1>Virtualization Chatbot</h1>
+            <h1>Visualization Chatbot</h1>
         </div>
         <div class="header-right">
             <span>{{ user_name }}</span>
@@ -21,11 +21,23 @@
     
     <main>
         <div class="chat-container">
-            <div class="options">
-                <button class="option">Generate Ideas</button>
-                <button class="option">Visualize Trends</button>
-                <button class="option">Analyze Data</button>
-                <button class="option">Report Insights</button>
+            <div class="options-grid">
+                <div class="option">
+                    <img src="{{ url_for('static', filename='bulb.svg') }}" alt="Generate Ideas">
+                    <span>Generate Ideas</span>
+                </div>
+                <div class="option">
+                    <img src="{{ url_for('static', filename='graph.svg') }}" alt="Visualize Trends">
+                    <span>Visualize Trends</span>
+                </div>
+                <div class="option">
+                    <img src="{{ url_for('static', filename='search.svg') }}" alt="Analyze Data">
+                    <span>Analyze Data</span>
+                </div>
+                <div class="option">
+                    <img src="{{ url_for('static', filename='chat.svg') }}" alt="Report Insights">
+                    <span>Report Insights</span>
+                </div>
             </div>
             
             <div class="chat-box">
