@@ -3,21 +3,26 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Virtualization Chatbot</title>
+    <title>Visualization Chatbot</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
     <link href="https://fonts.googleapis.com/css2?family=Noto+Serif&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.4/css/all.min.css">
 </head>
 <body>
     <header>
-        <div class="header-left"></div>
-        <div class="header-center">
-            <h1>Visualization Chatbot</h1>
+        <div class="logo">
+            <img src="{{ url_for('static', filename='bot.png') }}" alt="PlotPal Logo"> PlotPal - Visualize Data
         </div>
-        <div class="header-right">
+        <div class="header-right1">
             <span>{{ user_name }}</span>
-            <img src="{{ url_for('static', filename='person.svg') }}" alt="Profile Icon" class="profile-icon">
+            <img src="{{ url_for('static', filename='person.svg') }}" alt="Profile Icon" class="profile-icon" id="profile-icon">
+            <!-- Logout Popup -->
+            <div class="logout-popup" id="logout-popup">
+                <a href="{{ url_for('logout') }}">Logout</a>
+            </div>
         </div>
     </header>
+    
     
     <main>
         <div class="chat-container">
@@ -55,6 +60,9 @@
                     </div>
                 </div>
             </div>
+            
+            
+            
         </div>
     </main>
     
@@ -65,6 +73,7 @@
             const sendBtn = document.getElementById('send-btn');
             const userInput = document.getElementById('user-input');
             const chatOutput = document.getElementById('chat-output');
+            const userName = "{{ user_name }}"; // Assuming user_name is passed from Flask context
     
             // Handle file attachment
             attachBtn.addEventListener('click', function() {
@@ -87,35 +96,71 @@
             });
     
             function sendMessage() {
-                const message = userInput.value.trim();
-                if (message) {
-                    // Display user message
-                    chatOutput.innerHTML += `<div class="user-message">${message}</div>`;
-                    
-                    // Send message to server
-                    fetch('/chat', {
-                        method: 'POST',
-                        headers: {
-                            'Content-Type': 'application/json',
-                        },
-                        body: JSON.stringify({ message: message }),
-                    })
-                    .then(response => response.json())
-                    .then(data => {
-                        // Display bot response
-                        chatOutput.innerHTML += `<div class="bot-response">${data.response}</div>`;
-                        chatOutput.scrollTop = chatOutput.scrollHeight;
-                    })
-                    .catch((error) => {
-                        console.error('Error:', error);
-                    });
-    
-                    // Clear input
-                    userInput.value = '';
-                    fileInput.value = ''; // Clear file input
-                }
+    const message = userInput.value.trim();
+    if (message) {
+        const formData = new FormData();
+        formData.append('message', message);
+        
+        // Append file if one is selected
+        const fileInput = document.getElementById('file-input');
+        if (fileInput.files.length > 0) {
+            formData.append('file', fileInput.files[0]);
+        }
+
+        // Display user message
+        chatOutput.innerHTML += `
+            <div class="user-message">
+                <span class="user-name">${userName}</span>
+                <div class="message-content">${message}</div>
+            </div>`;
+
+        // Send message to server
+        fetch('/chat', {
+            method: 'POST',
+            body: formData
+        })
+        .then(response => response.json())
+        .then(data => {
+            chatOutput.innerHTML += `
+                <div class="bot-response">
+                    <div class="message-content">${data.response}</div>
+                    <span class="bot-name">Bot</span>
+                </div>`;
+            chatOutput.scrollTop = chatOutput.scrollHeight;
+        });
+
+        // Clear input
+        userInput.value = '';
+        fileInput.value = ''; // Clear file input
+    }
+}
+        });
+
+
+        // JavaScript to handle popup display on click
+        document.getElementById('profile-icon').addEventListener('click', function() {
+            var popup = document.getElementById('logout-popup');
+            if (popup.style.display === 'none' || popup.style.display === '') {
+                popup.style.display = 'block';
+            } else {
+                popup.style.display = 'none';
             }
         });
+
+        // Close the popup if clicked outside of it
+        window.onclick = function(event) {
+            if (!event.target.matches('#profile-icon')) {
+                var popup = document.getElementById('logout-popup');
+                if (popup.style.display === 'block') {
+                    popup.style.display = 'none';
+                }
+            }
+        }
     </script>
+    
+    
+    
+    
+    
 </body>
 </html>

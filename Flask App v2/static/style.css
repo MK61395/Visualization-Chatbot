@@ -1,17 +1,80 @@
+@import url('https://fonts.googleapis.com/css?family=Montserrat:400,800');
+
 body {
-    font-family: 'Noto Serif', serif;
-    background-color: #092F34;
-    color: #D9D9D9;
-    margin: 0;
-    padding: 0;
+    padding-top: 70px; /* Add padding to body to prevent content from being hidden by fixed header */
+    background-color: #12192C;
+    font-family: 'Montserrat', sans-serif;
 }
 
 header {
+    background-color: #00C9A7;
+    color: #12192C;
+    padding: 15px 20px; /* Increased padding for more height */
+    width: 100%;
+    position: fixed;
+    top: 0;
+    left: 0;
+    z-index: 1000;
     display: flex;
     justify-content: space-between;
     align-items: center;
-    padding: 20px;
-    background-color: #0B3F47;
+    height: 65px; /* Set a fixed height */
+    box-sizing: border-box;
+}
+
+.logo {
+    font-size: 30px; /* Increased font size */
+    font-weight: bold;
+    margin: 0;
+    display: flex;
+    align-items: center;
+    flex-grow: 1; /* Allow logo to take up available space */
+    justify-content: center; /* Center the logo and text */
+}
+
+.logo img {
+    width: 40px; /* Slightly larger logo */
+    height: auto;
+    margin-right: 15px;
+}
+
+
+
+
+.header-right1 {
+    display: flex;
+    align-items: center;
+    margin-left: auto; /* Pushes .header-right1 to the right */
+}
+
+.header-right1 span {
+    /*font-size: 18px;
+    font-weight: 500;*/
+    margin-left: 10px; /* Adjust as needed */
+
+    font: 600 18px 'Arial', sans-serif;
+}
+
+
+
+
+
+
+.header-right {
+    display: flex;
+    align-items: center;
+}
+
+.header-right img.profile-icon {
+    width: 40px;
+    height: 40px;
+    border-radius: 50%;
+    margin-left: 15px;
+}
+
+.header-right span {
+    font-size: 18px;
+    font-weight: bold; /* Make user name bold */
 }
 
 .header-left, .header-right {
@@ -25,7 +88,8 @@ header {
 
 .header-center h1 {
     margin: 0;
-    font-size: 24px; 
+    font-size: 24px;
+    color: #12192C;
 }
 
 .header-right {
@@ -58,7 +122,7 @@ main {
 }
 
 .chat-container {
-    background-color: #0B3F47;
+    background-color: #00C9A7;
     border-radius: 5px;
     padding: 20px;
     max-width: 800px;
@@ -79,10 +143,10 @@ main {
 }
 
 .option {
-    background-color: #145D67;
+    background-color: #12192C;
     border: none;
     padding: 20px;
-    color: white;
+    color: #FFFFFF;
     cursor: pointer;
     font-size: 16px;
     border-radius: 5px;
@@ -106,10 +170,10 @@ main {
 }
 
 .options .option {
-    background-color: #145D67;
+    background-color: #12192C;
     border: none;
     padding: 15px 20px;
-    color: white;
+    color: #FFFFFF;
     cursor: pointer;
     font-size: 14px;
     border-radius: 5px;
@@ -118,12 +182,11 @@ main {
 
 .chat-box {
     width: 100%;
-    background-color: #0B3F47;
+    background-color: #12192C;
     border-radius: 15px;
     padding: 0px; 
     box-sizing: border-box;
 }
-
 
 #chat-output {
     min-height: 100px;
@@ -134,42 +197,86 @@ main {
 
 .chat-input input::placeholder {
     color: #D9D9D9;
-    opacity: 1; 
+    font-size: 15px;
+    opacity: 1;
 }
 
-.chat-input input::-ms-input-placeholder { 
+.chat-input input::-ms-input-placeholder {
     color: #D9D9D9;
 }
 
 .user-message {
-    text-align: right;
-    color: white;
-    background-color: #145D67;
+    display: flex;
+    justify-content: flex-end;
+    align-items: center;
     margin: 5px 0;
+}
+
+.user-message .message-content {
+    text-align: right;
+    color: #12192C;
+    background-color: #00C9A7;
     padding: 10px;
     border-radius: 5px;
+    width: 50%;
+    box-sizing: border-box;
+    word-wrap: break-word;
+}
+
+.user-message .user-name {
+    color: #ffffff;
+    margin-right: 10px;
 }
 
 .bot-response {
+    display: flex;
+    justify-content: flex-start;
+    align-items: center;
+    margin: 5px 0;
+}
+
+.bot-response .message-content {
     text-align: left;
-    color: #092F34;
-    background-color: #D9D9D9;
+    color: #12192C;
+    background-color: #00C9A7;
+    padding: 10px;
+    border-radius: 5px;
+    width: 50%;
+    box-sizing: border-box;
+    word-wrap: break-word;
+    margin-right: 10px;
+}
+
+.bot-response .bot-name {
+    color: #ffffff;
+}
+
+
+
+
+/*
+.bot-response {
+    text-align: left;
+    color: #12192C;
+    background-color: #FFFFFF;
     margin: 5px 0;
     padding: 10px;
     border-radius: 5px;
-}
+}*/
 
 .chat-input-container {
     display: flex;
     justify-content: center;
     width: 100%;
+    box-sizing: border-box; 
 }
+
 
 .chat-input {
     display: flex;
     align-items: center;
-    width: 98%;
-    background-color: #145D67;
+    width: 94%;
+    background-color: #12192C;
     border-radius: 5px;
     padding: 5px;
 }
@@ -179,19 +286,77 @@ main {
     padding: 10px;
     border: none;
     background-color: transparent;
-    color: #D9D9D9;
+    color: #FFFFFF;
     font-family: 'Noto Serif', serif;
 }
 
 .chat-input button {
     background-color: transparent;
     border: none;
-    color: #D9D9D9;
+    color: #FFFFFF;
     cursor: pointer;
     font-size: 18px;
     padding: 10px;
 }
 
 .chat-input button:hover {
-    color: #FFFFFF;
+    color: #00C9A7;
 }
+
+.chat-input button:hover img {
+    filter: brightness(0) saturate(100%) invert(54%) sepia(37%) saturate(2469%) hue-rotate(131deg) brightness(99%) contrast(101%);
+}
+
+/*
+.profile-icon:hover {
+    filter: brightness(0) saturate(100%) invert(54%) sepia(37%) saturate(2469%) hue-rotate(131deg) brightness(99%) contrast(101%);
+}*/
+
+.header-right1 {
+    position: relative; /* Ensure the container is relative for absolute positioning */
+}
+.logout-popup {
+    position: absolute;
+    top: 50px; /* Adjust this value to position the popup vertically */
+    right: 0;
+    background-color: #00C9A7;
+    color: #12192C;
+    z-index: 1;
+    display: none;
+    padding: 10px;
+    border-radius: 5px;
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
+    width:130px;
+}
+.logout-popup a {
+    color: #12192C;
+    text-decoration: none;
+    display: block;
+    padding: 8px 16px;
+    transition: background-color 0.3s;
+}
+.logout-popup a:hover {
+    background-color: #ffffff;
+}
+
+.profile-icon:hover {
+    filter: brightness(0) saturate(100%) invert(100%);
+}
+
+#chat-output::-webkit-scrollbar {
+    width: 10px;
+}
+
+#chat-output::-webkit-scrollbar-track {
+    background: #12192C;
+}
+
+#chat-output::-webkit-scrollbar-thumb {
+    background: #ffffff;
+    border-radius: 5px;
+}
+
+#chat-output::-webkit-scrollbar-thumb:hover {
+    background: #00C9A7;  /* Slightly lighter shade for hover effect */
+}
+
