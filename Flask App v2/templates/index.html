@@ -10,9 +10,10 @@
 </head>
 <body>
     <header>
-        <div class="logo">
-            <img src="{{ url_for('static', filename='bot.png') }}" alt="PlotPal Logo"> PlotPal - Visualize Data
+        <div>
+           <span class="title">PlotPal - Visualize Data</span>
         </div>
+        
         <div class="header-right1">
             <span>{{ user_name }}</span>
             <img src="{{ url_for('static', filename='person.svg') }}" alt="Profile Icon" class="profile-icon" id="profile-icon">
@@ -23,9 +24,11 @@
         </div>
     </header>
     
-    
     <main>
-        <div class="chat-container">
+        <div class="logos">
+            <img src="{{ url_for('static', filename='bot.png') }}" alt="PlotPal Logo">
+        </div>
+        <div class="options-container">
             <div class="options-grid">
                 <div class="option">
                     <img src="{{ url_for('static', filename='bulb.svg') }}" alt="Generate Ideas">
@@ -44,30 +47,91 @@
                     <span>Report Insights</span>
                 </div>
             </div>
-            
-            <div class="chat-box">
-                <div id="chat-output"></div>
-                <div class="chat-input-container">
-                    <div class="chat-input">
-                        <input type="file" id="file-input" style="display: none;">
-                        <button id="attach-btn">
-                            <img src="{{ url_for('static', filename='attach.svg') }}" alt="Attach file">
-                        </button>
-                        <input type="text" id="user-input" placeholder="How can I help you today?">
-                        <button id="send-btn">
-                            <img src="{{ url_for('static', filename='arrow.svg') }}" alt="Send message">
-                        </button>
-                    </div>
-                </div>
-            </div>
-            
-            
+        </div>
+        
+        <!-- New buttons -->
+        <div class="buttons-container">
+            <button class="action-button">
+                <img src="{{ url_for('static', filename='download.svg') }}" alt="Save PDF">
+                Save PDF
+            </button>
+            <button class="action-button" id="email-chat-btn">
+                <img src="{{ url_for('static', filename='email.svg') }}" alt="Email Chat">
+                Email Chat
+            </button>
             
         </div>
     </main>
     
+    <div class="chat-box" id="chat-box">
+        <div id="chat-output" class="chat-output-container"></div>
+        <div id="loading-spinner" style="display: none;">
+            <img src="{{ url_for('static', filename='loading1.gif') }}" alt="Loading...">
+        </div>
+        <div class="chat-mycontainer">
+            <div class="chat-input-container">
+                <div class="chat-input">
+                    <input type="file" id="file-input" style="display: none;">
+                    <button id="attach-btn">
+                        <img src="{{ url_for('static', filename='attach.svg') }}" alt="Attach file">
+                    </button>
+                    <input type="text" id="user-input" placeholder="How can I help you today?">
+                    <button id="send-btn">
+                        <img src="{{ url_for('static', filename='arrow.svg') }}" alt="Send message">
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+
     <script>
         document.addEventListener('DOMContentLoaded', function() {
+            document.getElementById('email-chat-btn').addEventListener('click', function() {
+                var messages = [];
+                var messageElements = document.querySelectorAll('.user-message, .bot-response');
+    
+                if (messageElements.length === 0) {
+                    alert("There are no messages to email. Please start a conversation first.");
+                    return;
+                }
+    
+                messageElements.forEach(function(element) {
+                    var sender = element.classList.contains('user-message') ? 'You' : 'PlotPal';
+                    var text = element.querySelector('.message-content').textContent;
+                    messages.push({sender: sender, text: text});
+                });
+    
+                // Disable button to prevent multiple clicks
+                this.disabled = true;
+                this.textContent = 'Sending...';
+    
+                fetch('/email_chat', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({messages: messages}),
+                })
+                .then(response => {
+                    if (!response.ok) {
+                        return response.json().then(err => { throw err; });
+                    }
+                    return response.json();
+                })
+                .then(data => {
+                    alert(data.message); // Show success message
+                    this.disabled = false;
+                    this.textContent = 'Email Chat';
+                })
+                .catch(error => {
+                    console.error('Error:', error);
+                    alert('Failed to send email. Please try again later.');
+                    this.disabled = false;
+                    this.textContent = 'Email Chat';
+                });
+            });
+    
             const attachBtn = document.getElementById('attach-btn');
             const fileInput = document.getElementById('file-input');
             const sendBtn = document.getElementById('send-btn');
@@ -96,47 +160,58 @@
             });
     
             function sendMessage() {
-    const message = userInput.value.trim();
-    if (message) {
-        const formData = new FormData();
-        formData.append('message', message);
-        
-        // Append file if one is selected
-        const fileInput = document.getElementById('file-input');
-        if (fileInput.files.length > 0) {
-            formData.append('file', fileInput.files[0]);
-        }
-
-        // Display user message
-        chatOutput.innerHTML += `
-            <div class="user-message">
-                <span class="user-name">${userName}</span>
-                <div class="message-content">${message}</div>
-            </div>`;
-
-        // Send message to server
-        fetch('/chat', {
-            method: 'POST',
-            body: formData
-        })
-        .then(response => response.json())
-        .then(data => {
-            chatOutput.innerHTML += `
-                <div class="bot-response">
-                    <div class="message-content">${data.response}</div>
-                    <span class="bot-name">Bot</span>
-                </div>`;
-            chatOutput.scrollTop = chatOutput.scrollHeight;
+                const message = userInput.value.trim();
+                if (message) {
+                    const formData = new FormData();
+                    formData.append('message', message);
+                    
+                    // Append file if one is selected
+                    const fileInput = document.getElementById('file-input');
+                    if (fileInput.files.length > 0) {
+                        formData.append('file', fileInput.files[0]);
+                    }
+    
+                    // Display user message
+                    chatOutput.innerHTML += `
+                        <div class="user-message">
+                            <span class="user-name">${userName}</span>
+                            <div class="message-content">${message}</div>
+                        </div>`;
+    
+                    // Show loading spinner
+                    const loadingSpinner = document.getElementById('loading-spinner');
+                    loadingSpinner.style.display = 'block';
+    
+                    // Send message to server
+                    fetch('/chat', {
+                        method: 'POST',
+                        body: formData
+                    })
+                    .then(response => response.json())
+                    .then(data => {
+                        // Hide loading spinner
+                        loadingSpinner.style.display = 'none';
+    
+                        chatOutput.innerHTML += `
+                            <div class="bot-response">
+                                <div class="message-content">${data.response}</div>
+                                <span class="bot-name">Bot</span>
+                            </div>`;
+                        chatOutput.scrollTop = chatOutput.scrollHeight;
+                    })
+                    .catch(error => {
+                        console.error('Error:', error);
+                        // Hide loading spinner even if there's an error
+                        loadingSpinner.style.display = 'none';
+                    });
+    
+                    // Clear input
+                    userInput.value = '';
+                    fileInput.value = ''; // Clear file input
+                }
+            }
         });
-
-        // Clear input
-        userInput.value = '';
-        fileInput.value = ''; // Clear file input
-    }
-}
-        });
-
-
+    
         // JavaScript to handle popup display on click
         document.getElementById('profile-icon').addEventListener('click', function() {
             var popup = document.getElementById('logout-popup');
@@ -146,7 +221,74 @@
                 popup.style.display = 'none';
             }
         });
-
+    
+        document.querySelector('.action-button:first-child').addEventListener('click', function() {
+            var messages = [];
+            var messageElements = document.querySelectorAll('.user-message, .bot-response');
+            
+            if (messageElements.length === 0) {
+                alert("There are no messages to save. Please start a conversation first.");
+                return;
+            }
+    
+            messageElements.forEach(function(element) {
+                var sender = element.classList.contains('user-message') ? 'You' : 'PlotPal';
+                var text = element.querySelector('.message-content').textContent;
+                messages.push({sender: sender, text: text});
+            });
+    
+            // Store original button content
+            var originalContent = this.innerHTML;
+    
+            // Show loading indicator
+            this.innerHTML = 'Generating PDF...';
+            this.disabled = true;
+    
+            // Generate filename with current date and time
+            var now = new Date();
+            var dateTime = now.getFullYear() + '-' + 
+                           String(now.getMonth() + 1).padStart(2, '0') + '-' + 
+                           String(now.getDate()).padStart(2, '0') + '_' + 
+                           String(now.getHours()).padStart(2, '0') + '-' + 
+                           String(now.getMinutes()).padStart(2, '0') + '-' + 
+                           String(now.getSeconds()).padStart(2, '0');
+            var filename = 'chat_history_' + dateTime + '.pdf';
+    
+            fetch('/save_pdf', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({messages: messages, filename: filename}),
+            })
+            .then(response => {
+                if (!response.ok) {
+                    return response.json().then(err => { throw err; });
+                }
+                return response.blob();
+            })
+            .then(blob => {
+                var url = window.URL.createObjectURL(blob);
+                var a = document.createElement('a');
+                a.style.display = 'none';
+                a.href = url;
+                a.download = filename;
+                document.body.appendChild(a);
+                a.click();
+                window.URL.revokeObjectURL(url);
+                
+                // Reset button to original state
+                this.innerHTML = originalContent;
+                this.disabled = false;
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                // Reset button to original state even if there's an error
+                this.innerHTML = originalContent;
+                this.disabled = false;
+            });
+        });
+        
         // Close the popup if clicked outside of it
         window.onclick = function(event) {
             if (!event.target.matches('#profile-icon')) {
@@ -157,10 +299,6 @@
             }
         }
     </script>
-    
-    
-    
-    
     
 </body>
 </html>
