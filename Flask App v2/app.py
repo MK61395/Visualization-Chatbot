@@ -18,6 +18,12 @@ import io
 from flask import jsonify
 import traceback
 import unicodedata
+from flask_mail import Mail, Message
+import re
+import unicodedata
+from datetime import datetime
+
+
 
 app = Flask(__name__)
 app.config['SECRET_KEY'] = 'your_secret_key'
@@ -31,8 +37,26 @@ if not os.path.exists(app.config['UPLOAD_FOLDER']):
 db = SQLAlchemy(app)
 migrate = Migrate(app, db)
 
+
+
+
+
+app.config['MAIL_SERVER'] = 'smtp.gmail.com'
+app.config['MAIL_PORT'] = 587
+app.config['MAIL_USE_TLS'] = True
+app.config['MAIL_USERNAME'] = 'm.kashi613@gmail.com' # Use an app password
+app.config['MAIL_PASSWORD'] = 'your password'
+app.config['MAIL_DEFAULT_SENDER'] = ('PlotPal', 'm.kashi613@gmail.com')
+
+mail = Mail(app)
+
+
+
+
+
 # Set the API key for the generative model
-os.environ['GOOGLE_API_KEY'] = 'YOUR_API_KEY'
+# os.environ['GOOGLE_API_KEY'] = ''
+os.environ['GOOGLE_API_KEY'] = 'Your_API_Key'
 # Configure the generative AI with the API key
 genai.configure(api_key=os.environ["GOOGLE_API_KEY"])
 
@@ -111,6 +135,20 @@ def parse_query_gpt(query, file_info):
     """
     return generate_text(prompt)
 
+def remove_emojis(text):
+    emoji_pattern = re.compile("["
+        u"\U0001F600-\U0001F64F"  # emoticons
+        u"\U0001F300-\U0001F5FF"  # symbols & pictographs
+        u"\U0001F680-\U0001F6FF"  # transport & map symbols
+        u"\U0001F1E0-\U0001F1FF"  # flags (iOS)
+        u"\U00002702-\U000027B0"
+        u"\U000024C2-\U0001F251"
+        "]+", flags=re.UNICODE)
+    return emoji_pattern.sub(r'', text)
+
+def remove_non_printable(text):
+    return ''.join(c for c in text if c.isprintable() or c.isspace())
+
 
 @app.route('/')
 def home():
@@ -156,6 +194,7 @@ def signup():
     except:
         flash('Email address already exists')
         return redirect(url_for('login'))
+    
 
 
 @app.route('/chat', methods=['POST'])
@@ -167,7 +206,6 @@ def chat():
         file = request.files['file']
         if file.filename != '' and file.filename.endswith('.csv'):
             session.clear()
-            session.modified = True  
             filename = secure_filename(file.filename)
             file_path = os.path.join(app.config['UPLOAD_FOLDER'], filename)
             file.save(file_path)
@@ -191,24 +229,35 @@ def chat():
                 'uniques': uniques
             }
             
+            session['file_info'] = file_info
             query = f"Please provide information about the file based on this data:"
             bot_response = parse_query_gpt(query, file_info)
             bot_response = re.sub(r'\*\*(.*?)\*\*', r'<h3>\1</h3>', bot_response )
             bot_response = bot_response.replace('*', '')
-            txt = {'Information': bot_response}
-            session['bot'] = txt
         else:
             bot_response = "Please upload a valid CSV file."
-    elif 'bot' in session:
+    elif 'file_info' in session:
         if 'file' in user_message.lower() or 'data' in user_message.lower() or 'rows' in user_message.lower() or 'column' in user_message.lower():
-            txt = session['bot']
-            prompt = f"Query: '{user_message}'. Answer according to this provided info: {txt}"
+            file_info = session['file_info']
+            # Example of handling additional user messages that relate to the CSV data
+            if 'shape' in user_message.lower():
+                prompt = f"The shape of the uploaded CSV is {file_info['shape']}."
+            elif 'columns' in user_message.lower():
+                prompt = f"The columns in the uploaded CSV are {file_info['columns']}."
+            elif 'nulls' in user_message.lower():
+                prompt = f"The number of null values in each column is {file_info['nulls']}."
+            elif 'stats' in user_message.lower():
+                prompt = f"The statistical summary of the CSV is {file_info['stats']}."
+            else:
+                prompt = parse_query_gpt(user_message, file_info)
+            bot_response = generate_text(prompt)
+            bot_response = re.sub(r'\*\*(.*?)\*\*', r'<h3>\1</h3>', bot_response )
+            bot_response = bot_response.replace('*', '')
         else:
             prompt = f"User's message: '{user_message}'. Please respond to this message."
-
-        bot_response = generate_text(prompt)
-        bot_response = re.sub(r'\*\*(.*?)\*\*', r'<h3>\1</h3>', bot_response )
-        bot_response = bot_response.replace('*', '')
+            bot_response = generate_text(prompt)
+            bot_response = re.sub(r'\*\*(.*?)\*\*', r'<h3>\1</h3>', bot_response )
+            bot_response = bot_response.replace('*', '')
     else:
         prompt = f"User's message: '{user_message}'. Please respond to this message."
         bot_response = generate_text(prompt)
@@ -228,17 +277,13 @@ class PDF(FPDF):
         self.cell(0, 10, f'Page {self.page_no()}', 0, 0, 'C')
 
     def write_message(self, sender, text):
-        filtered_text = self.filter_text(text)
-        if filtered_text.strip():  # Only add non-empty lines
+        cleaned_text = remove_non_printable(remove_emojis(text))
+        if cleaned_text.strip():  # Only add non-empty lines
             self.set_font("Arial", 'B', 10)
             self.multi_cell(0, 10, f"{sender}:", 0, 'L')
             self.set_font("Arial", '', 10)
-            self.multi_cell(0, 10, filtered_text)
+            self.multi_cell(0, 10, cleaned_text)
             self.ln(5)
-
-    def filter_text(self, text):
-        # Remove characters not supported by latin-1 encoding
-        return ''.join(c for c in text if unicodedata.category(c)[0] != 'C')
 
 @app.route('/save_pdf', methods=['POST'])
 def save_pdf():
@@ -247,14 +292,22 @@ def save_pdf():
         
         pdf = PDF()
         pdf.add_page()
-        pdf.set_font("Arial", size=10)
         pdf.set_auto_page_break(auto=True, margin=15)
+        
+        # Add date and time at the top
+        current_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        pdf.set_font("Arial", "B", 16)
+        pdf.cell(0, 10, f"Chat History - Generated on {current_time}", 0, 1, "C")
+        pdf.ln(10)  # Add some space after the header
+        
+        # Reset font for messages
+        pdf.set_font("Arial", "", 12)
         
         for message in chat_messages:
             pdf.write_message(message['sender'], message['text'])
         
         pdf_output = io.BytesIO()
-        pdf_output.write(pdf.output(dest='S').encode('latin-1'))
+        pdf_output.write(pdf.output(dest='S').encode('latin-1', errors='ignore'))
         pdf_output.seek(0)
         
         return send_file(
@@ -267,6 +320,39 @@ def save_pdf():
         app.logger.error(f"Error generating PDF: {str(e)}")
         app.logger.error(traceback.format_exc())
         return jsonify({"error": str(e)}), 500
+    
+
+
+@app.route('/email_chat', methods=['POST'])
+def email_chat():
+    try:
+        if 'user_id' not in session:
+            return jsonify({"error": "User not logged in"}), 401
+
+        user_id = session['user_id']
+        user = User.query.filter_by(id=user_id).first()
+
+        if not user:
+            return jsonify({"error": "User not found"}), 404
+
+        chat_messages = request.json['messages']
+
+        email_body = "Chat History:\n\n"
+        for message in chat_messages:
+            email_body += f"{message['sender']}: {message['text']}\n\n"
+
+        msg = Message('Chat History', recipients=[user.email])
+        msg.body = email_body
+
+        mail.send(msg)
+
+        return jsonify({"message": "Email sent successfully"}), 200
+    except Exception as e:
+        app.logger.error(f"Error sending email: {str(e)}")
+        app.logger.error(traceback.format_exc())
+        return jsonify({"error": str(e)}), 500
+    
+
 
 @app.route('/logout')
 def logout():
