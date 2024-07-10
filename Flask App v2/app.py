@@ -22,6 +22,10 @@ from flask_mail import Mail, Message
 import re
 import unicodedata
 from datetime import datetime
+import base64
+from io import BytesIO 
+import matplotlib.pyplot as plt
+import plotly.express as px
 
 
 
@@ -39,24 +43,19 @@ migrate = Migrate(app, db)
 
 
 
-
-
 app.config['MAIL_SERVER'] = 'smtp.gmail.com'
 app.config['MAIL_PORT'] = 587
 app.config['MAIL_USE_TLS'] = True
 app.config['MAIL_USERNAME'] = 'm.kashi613@gmail.com' # Use an app password
-app.config['MAIL_PASSWORD'] = 'your password'
+app.config['MAIL_PASSWORD'] = 'Your Password'
 app.config['MAIL_DEFAULT_SENDER'] = ('PlotPal', 'm.kashi613@gmail.com')
 
 mail = Mail(app)
 
 
-
-
-
 # Set the API key for the generative model
 # os.environ['GOOGLE_API_KEY'] = ''
-os.environ['GOOGLE_API_KEY'] = 'Your_API_Key'
+os.environ['GOOGLE_API_KEY'] = 'YOUR_API_KEY'
 # Configure the generative AI with the API key
 genai.configure(api_key=os.environ["GOOGLE_API_KEY"])
 
@@ -74,6 +73,8 @@ class User(db.Model):
 with app.app_context():
     db.create_all()
 
+
+
 def preprocess_data(file_path, missing_value_threshold=0.1):
     df = pd.read_csv(file_path)
     num_rows = df.shape[0]
@@ -86,7 +87,7 @@ def preprocess_data(file_path, missing_value_threshold=0.1):
 
     missing_values = df.isna().sum()
     missing_proportion = missing_values / df.shape[0]
-
+    
     for col in df.columns:
         if missing_proportion[col] > missing_value_threshold:
             if df[col].dtype in ['int64', 'float64']:
@@ -106,12 +107,12 @@ def preprocess_data(file_path, missing_value_threshold=0.1):
                 except ValueError:
                     pass
 
-    categorical_cols = [col for col in df.columns if df[col].dtype == 'object']
-    df = pd.get_dummies(df, columns=categorical_cols)
+    # categorical_cols = [col for col in df.columns if df[col].dtype == 'object']
+    # df = pd.get_dummies(df, columns=categorical_cols)
 
-    small_df = df.sample(frac=0.05, random_state=42)
+    # small_df = df.sample(frac=0.05, random_state=42)
 
-    return df, small_df
+    return df
 
 def generate_text(prompt, retries=3, delay=5):
     for i in range(retries):
@@ -126,12 +127,81 @@ def generate_text(prompt, retries=3, delay=5):
                 raise
     raise Exception("Max retries exceeded")
 
-# Function to parse query and generate appropriate DataFrame operation
-def parse_query_gpt(query, file_info):
+def fig_to_base64(fig):
+    """Convert a matplotlib figure to a base64 encoded string."""
+    buf = BytesIO()
+    fig.savefig(buf, format='png')
+    buf.seek(0)
+    img_base64 = base64.b64encode(buf.read()).decode('utf-8')
+    buf.close()
+    return img_base64
+
+# Function to determine the context of the query
+def get_query_context(query):
     prompt = f"""
-    Dataset info: {file_info}
     Query: {query}
-    Provide the appropriate answer according to the given dataset info.
+    Based on the query, determine if it is related to pandas operations, matplotlib visualizations, general data operations, or if it is a general query not related to the dataset.
+    Respond with one of the following keywords: 'pandas', 'matplotlib', 'general', 'non-data'.
+    """
+    return generate_text(prompt).strip().lower()
+
+# Function to execute the generated code safely
+def execute_query(data, query_code):
+    try:
+        # Extract code from within the triple backticks
+        query_code = query_code.strip("```python").strip()
+        local_vars = {'df': data, 'plt': plt, 'px': px, 'result': None}
+        exec(query_code, {}, local_vars)
+        if 'fig' in local_vars:
+            img_base64 = fig_to_base64(local_vars['fig'])
+            return {'type': 'image', 'content': img_base64}
+        else:
+            return {'type': 'text', 'content': local_vars['result']}
+    except Exception as e:
+        return {'type': 'error', 'content': f"Error executing query: {e}"}
+
+    
+# Function to parse query and generate appropriate visualization code
+def parse_query_gpt(file_path, data, context, query, columns, dtypes, nulls, stats, uniques, shape):
+
+  if context == 'general':
+    prompt = f"""
+    Query: {query}
+    Here's the info about dataset
+    Dataset columns: {columns}
+    Data types: {dtypes}
+    Null values: {nulls}
+    Descriptive stats: {stats}
+    Unique values: {uniques}
+    Shape: {shape}
+    Provide the appropriate general information according to the dataset.
+    """
+    bot_response = generate_text(prompt)
+    bot_response = re.sub(r'\*\*(.*?)\*\*', r'<h3>\1</h3>', bot_response )
+    bot_response = bot_response.replace('*', '')
+    return bot_response
+  elif context == 'matplotlib':
+    prompt = f"""
+    Dataset columns: {columns}
+    Data types: {dtypes}
+    Null values: {nulls}
+    Descriptive stats: {stats}
+    Unique values: {uniques}
+    Shape: {shape}
+    Query: {query}
+    Provide the appropriate visualization code using either Matplotlib or Plotly to fulfill this query. Ensure to assign the plot object to a variable named 'fig'. Only give code output. Just give specifc code in as few lines as possible. Remember that file name is {file_path}
+    """
+    return execute_query(data, generate_text(prompt))
+  elif context == 'pandas':
+    prompt = f"""
+    Dataset columns: {columns, dtypes, nulls, stats, uniques, shape}
+    Query: {query}
+    Provide the appropriate DataFrame operation to fulfill this query in pandas. Give one line answer only. Ensure to assign the result to a variable named 'result'. Remember that file name is {file_path}
+    """
+    return execute_query(data, generate_text(prompt))
+  else:
+    prompt = f"""
+    Query: {query}
     """
     return generate_text(prompt)
 
@@ -164,6 +234,7 @@ def login():
         if user and check_password_hash(user.password, password):
             session['user_id'] = user.id
             session['username'] = user.username
+            session['email'] = email
             return redirect(url_for('index'))
         else:
             flash('Invalid email or password')
@@ -206,53 +277,56 @@ def chat():
         file = request.files['file']
         if file.filename != '' and file.filename.endswith('.csv'):
             session.clear()
+            session.modified = True  
             filename = secure_filename(file.filename)
             file_path = os.path.join(app.config['UPLOAD_FOLDER'], filename)
             file.save(file_path)
 
             # Preprocess the uploaded CSV file
-            df, smalldf = preprocess_data(file_path)
+            small_df = preprocess_data(file_path)
             
-            shape = df.shape
-            col = df.columns.tolist()
-            dtypes = df.dtypes.apply(lambda x: x.name).to_dict()  # Convert dtype objects to string names
-            nulls = df.isnull().sum().to_dict()
-            stats = df.describe().to_dict()
-            uniques = df.nunique().to_dict()
-
+            shape = small_df.shape
+            columns = small_df.columns.tolist()
+            dtypes = {col: str(dtype) for col, dtype in small_df.dtypes.to_dict().items()}
+            nulls = small_df.isnull().sum().to_dict()
+            stats = small_df.describe().to_dict()
+            uniques = small_df.nunique().to_dict()
+            
             file_info = {
                 'shape': shape,
-                'columns': col,
+                'columns': columns,
                 'dtypes': dtypes,
                 'nulls': nulls,
                 'stats': stats,
                 'uniques': uniques
             }
-            
+
             session['file_info'] = file_info
-            query = f"Please provide information about the file based on this data:"
-            bot_response = parse_query_gpt(query, file_info)
-            bot_response = re.sub(r'\*\*(.*?)\*\*', r'<h3>\1</h3>', bot_response )
-            bot_response = bot_response.replace('*', '')
+            session['file_path'] = file_path
+            context = 'general'
+            query = f"{user_message} Please provide information about the file based on this data:"
+            bot_response = parse_query_gpt(file_path, small_df, context, query, columns, dtypes, nulls, stats, uniques, shape)
+            # bot_response = re.sub(r'\*\*(.*?)\*\*', r'<h3>\1</h3>', bot_response )
+            # bot_response = bot_response.replace('*', '')
         else:
             bot_response = "Please upload a valid CSV file."
-    elif 'file_info' in session:
-        if 'file' in user_message.lower() or 'data' in user_message.lower() or 'rows' in user_message.lower() or 'column' in user_message.lower():
+    elif 'file_info' in session and 'file_path' in session:
+        if 'file' in user_message.lower() or 'data' in user_message.lower() or 'rows' in user_message.lower() or 'column' in user_message.lower() or 'visual' in user_message.lower() or 'graph' in user_message.lower() or 'csv' in user_message.lower():
             file_info = session['file_info']
-            # Example of handling additional user messages that relate to the CSV data
-            if 'shape' in user_message.lower():
-                prompt = f"The shape of the uploaded CSV is {file_info['shape']}."
-            elif 'columns' in user_message.lower():
-                prompt = f"The columns in the uploaded CSV are {file_info['columns']}."
-            elif 'nulls' in user_message.lower():
-                prompt = f"The number of null values in each column is {file_info['nulls']}."
-            elif 'stats' in user_message.lower():
-                prompt = f"The statistical summary of the CSV is {file_info['stats']}."
-            else:
-                prompt = parse_query_gpt(user_message, file_info)
-            bot_response = generate_text(prompt)
-            bot_response = re.sub(r'\*\*(.*?)\*\*', r'<h3>\1</h3>', bot_response )
-            bot_response = bot_response.replace('*', '')
+            file_path = session['file_path']
+            small_df = preprocess_data(file_path)
+            prompt = f"Query: '{user_message}'. Answer according to this provided info: {file_info}"
+            shape = file_info['shape']
+            columns = file_info['columns']
+            dtypes = file_info['dtypes']
+            nulls = file_info['nulls']
+            stats = file_info['stats']
+            uniques = file_info['uniques']
+            context = get_query_context(user_message)
+            bot_response = parse_query_gpt(file_path, small_df, context, prompt, columns, dtypes, nulls, stats, uniques, shape)
+
+            # bot_response = re.sub(r'\*\*(.*?)\*\*', r'<h3>\1</h3>', bot_response )
+            # bot_response = bot_response.replace('*', '')
         else:
             prompt = f"User's message: '{user_message}'. Please respond to this message."
             bot_response = generate_text(prompt)
@@ -264,7 +338,9 @@ def chat():
         bot_response = re.sub(r'\*\*(.*?)\*\*', r'<h3>\1</h3>', bot_response )
         bot_response = bot_response.replace('*', '')
 
-    return ({'response': bot_response})
+    return jsonify({'response': bot_response})
+
+
 
 class PDF(FPDF):
     def header(self):
@@ -360,6 +436,8 @@ def logout():
     session.pop('user_id', None)
     session.pop('dataset_info', None)
     return redirect(url_for('login'))
+
+
 
 if __name__ == '__main__':
     app.run(debug=True)
