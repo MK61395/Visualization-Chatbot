@@ -40,8 +40,8 @@ PlotPal is a Flask-based web application designed to help users visualize data t
 
 1. Clone the repository:
    ```bash
-   git clone https://github.com/MK61395/plotpal.git
-   cd plotpal
+   git clone https://github.com/MK61395/Visualisation-Chatbot.git
+   cd Visualisation-Chatbot
    
 2. Setup a viryual environment (optional but recommended)
    ```bash
