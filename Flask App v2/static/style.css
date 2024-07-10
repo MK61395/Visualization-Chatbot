@@ -276,6 +276,7 @@ main {
     padding: 10px;
     border-radius: 5px;
     width: fit-content;
+    max-width: 80%;
     box-sizing: border-box;
     margin-right: 10px;
     word-wrap: break-word;
