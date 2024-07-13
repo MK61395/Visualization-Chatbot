@@ -224,6 +224,11 @@ main {
     font-family: 'Noto Serif', serif;
 }
 
+.action-button:hover{
+    transform: scale(1.15);
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
+}
+
 
 .option:hover {
     transform: scale(1.05);
@@ -498,3 +503,40 @@ main {
   .chat-output-container:hover {
     scrollbar-color: var(--scrollbar-thumb-hover) var(--scrollbar-bg);
   }
+
+
+
+
+
+
+  .table-container {
+    overflow-x: auto;
+    max-width: 76%;
+    border: 2px solid #00C9A7;
+    border-radius: 5px;
+}
+
+.dataframe {
+    border-collapse: collapse;
+    width: 100%;
+    font-size: 0.9em;
+}
+
+.dataframe th, .dataframe td {
+    padding: 10px;
+    text-align: left;
+    color: white; /* Add this line */
+    border: 1px solid #00C9A7;
+    border-radius: 5px
+}
+
+.dataframe th {
+    background-color: #12192C;
+    font-weight: bold;
+    color: white; /* Add this line */
+    
+}
+
+.dataframe tr:nth-child(even) {
+    background-color: #12192C;
+}
