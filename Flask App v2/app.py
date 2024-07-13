@@ -1,4 +1,4 @@
-from flask import Flask, render_template, request, redirect, url_for, flash, session, jsonify
+from flask import Flask, render_template, request, redirect, url_for, flash, session, jsonify, send_from_directory
 from flask_sqlalchemy import SQLAlchemy
 from flask_migrate import Migrate
 from werkzeug.security import generate_password_hash, check_password_hash
@@ -12,7 +12,7 @@ import google.generativeai as genai
 import time
 from requests.exceptions import HTTPError
 import re
-from fpdf import FPDF
+from fpdf import FPDF, HTMLMixin
 from flask import send_file
 import io
 from flask import jsonify
@@ -26,6 +26,16 @@ import base64
 from io import BytesIO 
 import matplotlib.pyplot as plt
 import plotly.express as px
+import plotly.io as pio
+import base64
+from PIL import Image
+
+from reportlab.lib import colors
+from reportlab.lib.pagesizes import letter
+from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Image, Table, TableStyle
+from reportlab.lib.styles import getSampleStyleSheet
+from PIL import Image as PILImage
+from bs4 import BeautifulSoup
 
 
 
@@ -47,11 +57,10 @@ app.config['MAIL_SERVER'] = 'smtp.gmail.com'
 app.config['MAIL_PORT'] = 587
 app.config['MAIL_USE_TLS'] = True
 app.config['MAIL_USERNAME'] = 'm.kashi613@gmail.com' # Use an app password
-app.config['MAIL_PASSWORD'] = 'Your Password'
+app.config['MAIL_PASSWORD'] = 'YOUR PASSWORD'
 app.config['MAIL_DEFAULT_SENDER'] = ('PlotPal', 'm.kashi613@gmail.com')
 
 mail = Mail(app)
-
 
 # Set the API key for the generative model
 # os.environ['GOOGLE_API_KEY'] = ''
@@ -74,6 +83,14 @@ with app.app_context():
     db.create_all()
 
 
+def fig_to_base64(fig):
+     """Convert a matplotlib figure to a base64 encoded string."""
+     buf = BytesIO()
+     fig.savefig(buf, format='png')
+     buf.seek(0)
+     img_base64 = base64.b64encode(buf.read()).decode('utf-8')
+     buf.close()
+     return img_base64
 
 def preprocess_data(file_path, missing_value_threshold=0.1):
     df = pd.read_csv(file_path)
@@ -127,6 +144,7 @@ def generate_text(prompt, retries=3, delay=5):
                 raise
     raise Exception("Max retries exceeded")
 
+'''
 def fig_to_base64(fig):
     """Convert a matplotlib figure to a base64 encoded string."""
     buf = BytesIO()
@@ -135,8 +153,66 @@ def fig_to_base64(fig):
     img_base64 = base64.b64encode(buf.read()).decode('utf-8')
     buf.close()
     return img_base64
+'''
 
 # Function to determine the context of the query
+def ensure_dir(directory):
+    if not os.path.exists(directory):
+        os.makedirs(directory)
+
+def execute_query(data, query_code):
+    try:
+        # Ensure the graphs directory exists
+        graphs_dir = 'graphs'
+        ensure_dir(graphs_dir)
+
+        # Extract code from within the triple backticks
+        query_code = query_code.strip("```python").strip()
+        local_vars = {'df': data, 'plt': plt, 'px': px, 'result': None}
+
+        # Execute the code within a try-except block
+        try:
+            exec(query_code, {}, local_vars)
+        except Exception as code_error:
+            error_message = f"Error in generated code: {str(code_error)}"
+            print(error_message)
+            return {'type': 'error', 'content': error_message}
+
+        # Generate a unique filename
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        filename = f"fig_{timestamp}.png"
+        image_path = os.path.join(graphs_dir, filename)
+
+        if 'fig' in local_vars:
+            fig = local_vars['fig']
+            if isinstance(fig, plt.Figure):
+                # Matplotlib figure
+                fig.savefig(image_path)
+                plt.close(fig)  # Close the figure to free up memory
+            elif 'plotly.graph_objs._figure.Figure' in str(type(fig)):
+                # Plotly figure
+                pio.write_image(fig, image_path)
+            else:
+                raise ValueError("Unsupported figure type")
+
+            return {'type': 'image', 'content': f'/graphs/{filename}'}
+        elif local_vars['result'] is not None:
+            if isinstance(local_vars['result'], pd.DataFrame):
+                # Convert DataFrame to HTML table
+                html_table = local_vars['result'].to_html(classes='dataframe', index=False)
+                return {'type': 'table', 'content': html_table}
+            else:
+                return {'type': 'text', 'content': str(local_vars['result'])}
+        else:
+            return {'type': 'text', 'content': "Query executed successfully, but no result or figure was produced."}
+
+    except Exception as e:
+        import traceback
+        error_message = f"Error executing query: {str(e)}\n{traceback.format_exc()}"
+        print(error_message)  # Log the full error
+        return {'type': 'error', 'content': f"Error executing query: {str(e)}"}
+    
+n = 0
 def get_query_context(query):
     prompt = f"""
     Query: {query}
@@ -145,64 +221,46 @@ def get_query_context(query):
     """
     return generate_text(prompt).strip().lower()
 
-# Function to execute the generated code safely
-def execute_query(data, query_code):
-    try:
-        # Extract code from within the triple backticks
-        query_code = query_code.strip("```python").strip()
-        local_vars = {'df': data, 'plt': plt, 'px': px, 'result': None}
-        exec(query_code, {}, local_vars)
-        if 'fig' in local_vars:
-            img_base64 = fig_to_base64(local_vars['fig'])
-            return {'type': 'image', 'content': img_base64}
-        else:
-            return {'type': 'text', 'content': local_vars['result']}
-    except Exception as e:
-        return {'type': 'error', 'content': f"Error executing query: {e}"}
-
     
 # Function to parse query and generate appropriate visualization code
-def parse_query_gpt(file_path, data, context, query, columns, dtypes, nulls, stats, uniques, shape):
-
-  if context == 'general':
-    prompt = f"""
-    Query: {query}
-    Here's the info about dataset
-    Dataset columns: {columns}
-    Data types: {dtypes}
-    Null values: {nulls}
-    Descriptive stats: {stats}
-    Unique values: {uniques}
-    Shape: {shape}
-    Provide the appropriate general information according to the dataset.
-    """
-    bot_response = generate_text(prompt)
-    bot_response = re.sub(r'\*\*(.*?)\*\*', r'<h3>\1</h3>', bot_response )
-    bot_response = bot_response.replace('*', '')
-    return bot_response
-  elif context == 'matplotlib':
-    prompt = f"""
-    Dataset columns: {columns}
-    Data types: {dtypes}
-    Null values: {nulls}
-    Descriptive stats: {stats}
-    Unique values: {uniques}
-    Shape: {shape}
-    Query: {query}
-    Provide the appropriate visualization code using either Matplotlib or Plotly to fulfill this query. Ensure to assign the plot object to a variable named 'fig'. Only give code output. Just give specifc code in as few lines as possible. Remember that file name is {file_path}
-    """
-    return execute_query(data, generate_text(prompt))
-  elif context == 'pandas':
-    prompt = f"""
-    Dataset columns: {columns, dtypes, nulls, stats, uniques, shape}
-    Query: {query}
-    Provide the appropriate DataFrame operation to fulfill this query in pandas. Give one line answer only. Ensure to assign the result to a variable named 'result'. Remember that file name is {file_path}
-    """
-    return execute_query(data, generate_text(prompt))
-  else:
-    prompt = f"""
-    Query: {query}
-    """
+def parse_query_gpt(file_path, context, query, columns, dtypes, nulls, stats, uniques, shape):
+    if context == 'matplotlib':
+        print(context)
+        prompt = f"""
+        Dataset columns: {columns}
+        Data types: {dtypes}
+        Null values: {nulls}
+        Descriptive stats: {stats}
+        Unique values: {uniques}
+        Shape: {shape}
+        Query: {query}
+        Provide the appropriate visualization code using either Matplotlib or Plotly to fulfill this query. Ensure to assign the plot object to a variable named 'fig'. Only give code output. Just give specific code in as few lines as possible. Remember that all files are uploaded and saved. No need to import csv file. Remember that file name is {file_path}
+        """
+    elif context == 'pandas':
+        print(context)
+        prompt = f"""
+        Dataset columns: {columns, dtypes, nulls, stats, uniques, shape}
+        Query: {query}
+        Provide the appropriate DataFrame operation to fulfill this query in pandas. Give one line answer only. Ensure to assign the result to a variable named 'result'. Remember that all files are uploaded and saved. No need to import csv file.
+        """
+    elif context == 'general':
+        print(context)
+        prompt = f"""
+        Dataset columns: {columns}
+        Data types: {dtypes}
+        Null values: {nulls}
+        Descriptive stats: {stats}
+        Unique values: {uniques}
+        Shape: {shape}
+        Query: {query}
+        Provide the appropriate general information about the dataset.
+        """
+        
+    elif context == 'non-data':
+        print(context)
+        prompt = query
+        
+    
     return generate_text(prompt)
 
 def remove_emojis(text):
@@ -267,11 +325,16 @@ def signup():
         return redirect(url_for('login'))
     
 
+@app.route('/graphs/<path:filename>')
+def serve_image(filename):
+    return send_from_directory('graphs', filename)
+
 
 @app.route('/chat', methods=['POST'])
 def chat():
     user_message = request.form['message']
     bot_response = ""
+    max_retries = 3
 
     if 'file' in request.files:
         file = request.files['file']
@@ -282,7 +345,6 @@ def chat():
             file_path = os.path.join(app.config['UPLOAD_FOLDER'], filename)
             file.save(file_path)
 
-            # Preprocess the uploaded CSV file
             small_df = preprocess_data(file_path)
             
             shape = small_df.shape
@@ -305,40 +367,68 @@ def chat():
             session['file_path'] = file_path
             context = 'general'
             query = f"{user_message} Please provide information about the file based on this data:"
-            bot_response = parse_query_gpt(file_path, small_df, context, query, columns, dtypes, nulls, stats, uniques, shape)
-            # bot_response = re.sub(r'\*\*(.*?)\*\*', r'<h3>\1</h3>', bot_response )
-            # bot_response = bot_response.replace('*', '')
+            bot_response = parse_query_gpt(file_path, context, query, columns, dtypes, nulls, stats, uniques, shape)
+            bot_response = re.sub(r'\*\*(.*?)\*\*', r'<h3>\1</h3>', bot_response)
+            bot_response = bot_response.replace('*', '')
         else:
             bot_response = "Please upload a valid CSV file."
     elif 'file_info' in session and 'file_path' in session:
-        if 'file' in user_message.lower() or 'data' in user_message.lower() or 'rows' in user_message.lower() or 'column' in user_message.lower() or 'visual' in user_message.lower() or 'graph' in user_message.lower() or 'csv' in user_message.lower():
-            file_info = session['file_info']
-            file_path = session['file_path']
-            small_df = preprocess_data(file_path)
-            prompt = f"Query: '{user_message}'. Answer according to this provided info: {file_info}"
-            shape = file_info['shape']
-            columns = file_info['columns']
-            dtypes = file_info['dtypes']
-            nulls = file_info['nulls']
-            stats = file_info['stats']
-            uniques = file_info['uniques']
-            context = get_query_context(user_message)
-            bot_response = parse_query_gpt(file_path, small_df, context, prompt, columns, dtypes, nulls, stats, uniques, shape)
-
-            # bot_response = re.sub(r'\*\*(.*?)\*\*', r'<h3>\1</h3>', bot_response )
-            # bot_response = bot_response.replace('*', '')
-        else:
-            prompt = f"User's message: '{user_message}'. Please respond to this message."
-            bot_response = generate_text(prompt)
+        file_info = session['file_info']
+        file_path = session['file_path']
+        small_df = preprocess_data(file_path)
+        prompt = f"Query: '{user_message}'."
+        shape = file_info['shape']
+        columns = file_info['columns']
+        dtypes = file_info['dtypes']
+        nulls = file_info['nulls']
+        stats = file_info['stats']
+        uniques = file_info['uniques']
+        context = get_query_context(user_message)
+        if context=='non-data':
+            print('c')
             bot_response = re.sub(r'\*\*(.*?)\*\*', r'<h3>\1</h3>', bot_response )
             bot_response = bot_response.replace('*', '')
+        
+        retries = 0
+        error_message = None
+
+        while retries < max_retries:
+            bot_response = parse_query_gpt(file_path, context, prompt, columns, dtypes, nulls, stats, uniques, shape)
+            if context=='non-data' or 'general':
+                print('c')
+                bot_response = re.sub(r'\*\*(.*?)\*\*', r'<h3>\1</h3>', bot_response )
+                bot_response = bot_response.replace('*', '')
+            if isinstance(bot_response, str) and bot_response.startswith('```python'):
+                query_code = bot_response[len('```python'):].strip()
+                result = execute_query(small_df, query_code)
+                print(result)
+                if result['type'] == 'error':
+                    error_message = result['content']
+                    retries += 1
+                    prompt += f" Error: {error_message}"
+                    continue
+                elif result['type'] == 'image':
+                    bot_response = f"<img src='{result['content']}' alt='Generated Plot' />"
+                elif result['type'] == 'table':
+                    bot_response = result['content']  # This is now the HTML table
+                else:
+                    bot_response = re.sub(r'\*\*(.*?)\*\*', r'<h3>\1</h3>', result['content'])
+                    bot_response = bot_response.replace('*', '')
+                break
+            else:
+                break
+
+        if retries == max_retries:
+            bot_response = "Failed to generate a valid query after multiple attempts. Please rewrite your query."
+
     else:
         prompt = f"User's message: '{user_message}'. Please respond to this message."
         bot_response = generate_text(prompt)
-        bot_response = re.sub(r'\*\*(.*?)\*\*', r'<h3>\1</h3>', bot_response )
+        bot_response = re.sub(r'\*\*(.*?)\*\*', r'<h3>\1</h3>', bot_response)
         bot_response = bot_response.replace('*', '')
 
     return jsonify({'response': bot_response})
+
 
 
 
@@ -361,33 +451,102 @@ class PDF(FPDF):
             self.multi_cell(0, 10, cleaned_text)
             self.ln(5)
 
+    def write_image(self, image_data):
+        # Convert base64 image to a temporary file
+        image_file = io.BytesIO(base64.b64decode(image_data))
+        image = Image.open(image_file)
+        temp_image_path = 'temp_image.png'
+        image.save(temp_image_path)
+
+        # Add image to PDF
+        self.image(temp_image_path, x=None, y=None, w=0, h=60)
+        os.remove(temp_image_path)
+        self.ln(5)
+
 @app.route('/save_pdf', methods=['POST'])
 def save_pdf():
     try:
         chat_messages = request.json['messages']
         
-        pdf = PDF()
-        pdf.add_page()
-        pdf.set_auto_page_break(auto=True, margin=15)
-        
-        # Add date and time at the top
-        current_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        pdf.set_font("Arial", "B", 16)
-        pdf.cell(0, 10, f"Chat History - Generated on {current_time}", 0, 1, "C")
-        pdf.ln(10)  # Add some space after the header
-        
-        # Reset font for messages
-        pdf.set_font("Arial", "", 12)
-        
+        buffer = BytesIO()
+        doc = SimpleDocTemplate(buffer, pagesize=letter)
+        elements = []
+
+        styles = getSampleStyleSheet()
+        title_style = styles['Heading1']
+        sender_style = styles['Heading3']
+        normal_style = styles['Normal']
+
+        # Add title
+        elements.append(Paragraph(f"Chat History - Generated on {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}", title_style))
+        elements.append(Spacer(1, 12))
+
         for message in chat_messages:
-            pdf.write_message(message['sender'], message['text'])
-        
-        pdf_output = io.BytesIO()
-        pdf_output.write(pdf.output(dest='S').encode('latin-1', errors='ignore'))
-        pdf_output.seek(0)
+            sender = message['sender']
+            elements.append(Paragraph(f"{sender}:", sender_style))
+            elements.append(Spacer(1, 6))  # Add some space after the sender
+
+            if 'text' in message:
+                text = message['text']
+                # Split the text into paragraphs
+                paragraphs = text.split('\n')
+                for para in paragraphs:
+                    elements.append(Paragraph(para, normal_style))
+                    elements.append(Spacer(1, 3))  # Small space between paragraphs
+
+            if 'image' in message:
+                image_data = base64.b64decode(message['image'])
+                img = PILImage.open(BytesIO(image_data))
+                img_width, img_height = img.size
+                aspect = img_height / float(img_width)
+                
+                # Set a max width for the image in the PDF
+                max_width = 500
+                width = min(img_width, max_width)
+                height = width * aspect
+
+                img = Image(BytesIO(image_data), width=width, height=height)
+                elements.append(img)
+
+            if 'table' in message:
+                # Parse the HTML table
+                from bs4 import BeautifulSoup
+                soup = BeautifulSoup(message['table'], 'html.parser')
+                table = soup.find('table')
+                
+                if table:
+                    data = []
+                    for row in table.find_all('tr'):
+                        cols = row.find_all(['th', 'td'])
+                        data.append([col.text.strip() for col in cols])
+                    
+                    if data:
+                        t = Table(data)
+                        t.setStyle(TableStyle([
+                            ('BACKGROUND', (0, 0), (-1, 0), colors.grey),
+                            ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
+                            ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
+                            ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+                            ('FONTSIZE', (0, 0), (-1, 0), 12),
+                            ('BOTTOMPADDING', (0, 0), (-1, 0), 12),
+                            ('BACKGROUND', (0, 1), (-1, -1), colors.whitesmoke),
+                            ('TEXTCOLOR', (0, 1), (-1, -1), colors.black),
+                            ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
+                            ('FONTNAME', (0, 1), (-1, -1), 'Helvetica'),
+                            ('FONTSIZE', (0, 1), (-1, -1), 12),
+                            ('TOPPADDING', (0, 1), (-1, -1), 6),
+                            ('BOTTOMPADDING', (0, 1), (-1, -1), 6),
+                            ('GRID', (0, 0), (-1, -1), 1, colors.black)
+                        ]))
+                        elements.append(t)
+
+            elements.append(Spacer(1, 12))  # Add space after each message
+
+        doc.build(elements)
+        buffer.seek(0)
         
         return send_file(
-            pdf_output,
+            buffer,
             as_attachment=True,
             download_name="chat_history.pdf",
             mimetype="application/pdf"
