@@ -191,12 +191,37 @@
                     .then(data => {
                         // Hide loading spinner
                         loadingSpinner.style.display = 'none';
+
+                        if (data.response.type === 'image') {
+        // Handle image response
+                            chatOutput.innerHTML += `
+                                <div class="bot-response">
+                                    <img src="${data.response.content}" alt="Generated Graph" style="max-width: 100%; height: auto;">
+                                    <span class="bot-name">Bot</span>
+                                </div>`;
+                        }
+                        else if (data.response.startsWith('<table')) {
+        // Handle table response
+        chatOutput.innerHTML += `
+            <div class="bot-response">
+                <div class="table-container">${data.response}</div>
+                <span class="bot-name">Bot</span>
+            </div>`;
+    }else if (data.type === 'error') {
+        // Handle error response
+        chatOutput.innerHTML += `
+            <div class="bot-response error">
+                <div class="message-content">Error: ${data.content}</div>
+                <span class="bot-name">Bot</span>
+            </div>`;
+    } else {
     
                         chatOutput.innerHTML += `
                             <div class="bot-response">
                                 <div class="message-content">${data.response}</div>
                                 <span class="bot-name">Bot</span>
                             </div>`;
+                        }
                         chatOutput.scrollTop = chatOutput.scrollHeight;
                     })
                     .catch(error => {
@@ -221,73 +246,100 @@
                 popup.style.display = 'none';
             }
         });
+
+
+
     
         document.querySelector('.action-button:first-child').addEventListener('click', function() {
-            var messages = [];
-            var messageElements = document.querySelectorAll('.user-message, .bot-response');
-            
-            if (messageElements.length === 0) {
-                alert("There are no messages to save. Please start a conversation first.");
-                return;
-            }
+    var messages = [];
+    var messageElements = document.querySelectorAll('.user-message, .bot-response');
     
-            messageElements.forEach(function(element) {
-                var sender = element.classList.contains('user-message') ? 'You' : 'PlotPal';
-                var text = element.querySelector('.message-content').textContent;
-                messages.push({sender: sender, text: text});
-            });
-    
-            // Store original button content
-            var originalContent = this.innerHTML;
-    
-            // Show loading indicator
-            this.innerHTML = 'Generating PDF...';
-            this.disabled = true;
-    
-            // Generate filename with current date and time
-            var now = new Date();
-            var dateTime = now.getFullYear() + '-' + 
-                           String(now.getMonth() + 1).padStart(2, '0') + '-' + 
-                           String(now.getDate()).padStart(2, '0') + '_' + 
-                           String(now.getHours()).padStart(2, '0') + '-' + 
-                           String(now.getMinutes()).padStart(2, '0') + '-' + 
-                           String(now.getSeconds()).padStart(2, '0');
-            var filename = 'chat_history_' + dateTime + '.pdf';
-    
-            fetch('/save_pdf', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify({messages: messages, filename: filename}),
-            })
-            .then(response => {
-                if (!response.ok) {
-                    return response.json().then(err => { throw err; });
-                }
-                return response.blob();
-            })
-            .then(blob => {
-                var url = window.URL.createObjectURL(blob);
-                var a = document.createElement('a');
-                a.style.display = 'none';
-                a.href = url;
-                a.download = filename;
-                document.body.appendChild(a);
-                a.click();
-                window.URL.revokeObjectURL(url);
-                
-                // Reset button to original state
-                this.innerHTML = originalContent;
-                this.disabled = false;
-            })
-            .catch(error => {
-                console.error('Error:', error);
-                // Reset button to original state even if there's an error
-                this.innerHTML = originalContent;
-                this.disabled = false;
-            });
-        });
+    if (messageElements.length === 0) {
+        alert("There are no messages to save. Please start a conversation first.");
+        return;
+    }
+
+    messageElements.forEach(function(element) {
+        var sender = element.classList.contains('user-message') ? 'You' : 'PlotPal';
+        var textElement = element.querySelector('.message-content');
+        var imageElement = element.querySelector('img');
+        var tableElement = element.querySelector('.table-container');
+        
+        var message = { sender: sender };
+        
+        if (textElement) {
+            message.text = textElement.textContent;
+        }
+        
+        if (imageElement) {
+            var canvas = document.createElement('canvas');
+            var context = canvas.getContext('2d');
+            canvas.width = imageElement.width;
+            canvas.height = imageElement.height;
+            context.drawImage(imageElement, 0, 0, imageElement.width, imageElement.height);
+            var imageData = canvas.toDataURL('image/png').split(',')[1]; // Get base64 encoded image data
+            message.image = imageData;
+        }
+
+        if (tableElement) {
+        message.table = tableElement.innerHTML;
+    }
+
+        messages.push(message);
+    });
+
+    // Store original button content
+    var originalContent = this.innerHTML;
+
+    // Show loading indicator
+    this.innerHTML = 'Generating PDF...';
+    this.disabled = true;
+
+    // Generate filename with current date and time
+    var now = new Date();
+    var dateTime = now.getFullYear() + '-' + 
+                   String(now.getMonth() + 1).padStart(2, '0') + '-' + 
+                   String(now.getDate()).padStart(2, '0') + '_' + 
+                   String(now.getHours()).padStart(2, '0') + '-' + 
+                   String(now.getMinutes()).padStart(2, '0') + '-' + 
+                   String(now.getSeconds()).padStart(2, '0');
+    var filename = 'chat_history_' + dateTime + '.pdf';
+
+    fetch('/save_pdf', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({messages: messages, filename: filename}),
+    })
+    .then(response => {
+        if (!response.ok) {
+            return response.json().then(err => { throw err; });
+        }
+        return response.blob();
+    })
+    .then(blob => {
+        var url = window.URL.createObjectURL(blob);
+        var a = document.createElement('a');
+        a.style.display = 'none';
+        a.href = url;
+        a.download = filename;
+        document.body.appendChild(a);
+        a.click();
+        window.URL.revokeObjectURL(url);
+        
+        // Reset button to original state
+        this.innerHTML = originalContent;
+        this.disabled = false;
+    })
+    .catch(error => {
+        console.error('Error:', error);
+        // Reset button to original state even if there's an error
+        this.innerHTML = originalContent;
+        this.disabled = false;
+    });
+});
+
         
         // Close the popup if clicked outside of it
         window.onclick = function(event) {
