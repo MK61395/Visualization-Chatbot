@@ -28,21 +28,21 @@
         <div class="logos">
             <img src="{{ url_for('static', filename='bot.png') }}" alt="PlotPal Logo">
         </div>
-        <div class="options-container">
+        <div id="options-container" class="options-container">
             <div class="options-grid">
-                <div class="option">
+                <div class="option disabled">
                     <img src="{{ url_for('static', filename='bulb.svg') }}" alt="Generate Ideas">
                     <span>Generate Ideas</span>
                 </div>
-                <div class="option">
+                <div class="option disabled">
                     <img src="{{ url_for('static', filename='graph.svg') }}" alt="Visualize Trends">
                     <span>Visualize Trends</span>
                 </div>
-                <div class="option">
+                <div class="option disabled">
                     <img src="{{ url_for('static', filename='search.svg') }}" alt="Analyze Data">
                     <span>Analyze Data</span>
                 </div>
-                <div class="option">
+                <div class="option disabled">
                     <img src="{{ url_for('static', filename='chat.svg') }}" alt="Report Insights">
                     <span>Report Insights</span>
                 </div>
@@ -350,6 +350,73 @@
                 }
             }
         }
+
+
+
+
+        document.addEventListener('DOMContentLoaded', function() {
+    const fileInput = document.querySelector('input[type="file"]');
+    const optionsContainer = document.getElementById('options-container');
+
+    fileInput.addEventListener('change', function(e) {
+        if (e.target.files.length > 0) {
+            // File selected, enable options
+            optionsContainer.querySelectorAll('.option').forEach(option => {
+                option.classList.remove('disabled');
+            });
+        } else {
+            // No file selected, disable options
+            optionsContainer.querySelectorAll('.option').forEach(option => {
+                option.classList.add('disabled');
+            });
+        }
+    });
+});    
+
+
+    // Add this to your existing JavaScript
+    document.querySelectorAll('.option').forEach(option => {
+    option.addEventListener('click', function() {
+        if (!this.classList.contains('disabled')) {
+            const action = this.querySelector('span').textContent;
+            sendOptionRequest(action);
+        }
+    });
+});
+
+function sendOptionRequest(action) {
+    // Show loading spinner
+    const loadingSpinner = document.getElementById('loading-spinner');
+    loadingSpinner.style.display = 'block';
+
+    fetch('/option_action', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({action: action})
+    })
+    .then(response => response.json())
+    .then(data => {
+        // Hide loading spinner
+        loadingSpinner.style.display = 'none';
+
+        const chatOutput = document.getElementById('chat-output');
+        chatOutput.innerHTML += `
+            <div class="bot-response">
+                <div class="message-content">${data.response}</div>
+                <span class="bot-name">Bot</span>
+            </div>`;
+        chatOutput.scrollTop = chatOutput.scrollHeight;
+    })
+    .catch(error => {
+        console.error('Error:', error);
+        // Hide loading spinner even if there's an error
+        loadingSpinner.style.display = 'none';
+    });
+}
+
+
     </script>
     
 </body>
