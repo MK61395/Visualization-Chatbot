@@ -221,21 +221,95 @@ def get_query_context(query):
     """
     return generate_text(prompt).strip().lower()
 
+
+def is_tree_structure(dataframe):
+    # Step 1: Create the graph from the dataframe
+    graph = defaultdict(list)
+    in_degree = defaultdict(int)
+
+    for index, row in dataframe.iterrows():
+        parent = row.iloc[0] 
+        for child in row[1:]:
+            if pd.notna(child):  # Check if the child value is not NaN
+                graph[parent].append(child)
+                in_degree[child] += 1
+                if parent not in in_degree:
+                    in_degree[parent] = 0
+    
+    # Step 2: Find all nodes with in-degree 0 (potential roots)
+    roots = [node for node, degree in in_degree.items() if degree == 0]
+    
+    # There must be exactly one root node for a valid tree
+    if len(roots) != 1:
+        return False
+    
+    # Step 3: Check if the graph is connected and acyclic
+    root = roots[0]
+    visited = set()
+    queue = deque([root])
+    
+    while queue:
+        node = queue.popleft()
+        if node in visited:
+            return False
+        visited.add(node)
+        for neighbor in graph[node]:
+            queue.append(neighbor)
+    
+    # All nodes must be visited once
+    if len(visited) != len(in_degree):
+        return False
+    
+    return True
+
+
+def _graphs(df):
+    relationships = []
+
+    # Fill NaN values or drop rows with NaN values
+    df = df.dropna()
+
+    # Checking pairwise relationships
+    for col1 in df.columns:
+        for col2 in df.columns:
+            if col1 != col2:
+                # Numerical Correlation
+                if pd.api.types.is_numeric_dtype(df[col1]) and pd.api.types.is_numeric_dtype(df[col2]):
+                    if df[col1].std() != 0 and df[col2].std() != 0:  # Check for zero standard deviation
+                        corr = df[col1].corr(df[col2])
+                        if abs(corr) > 0.5:  # Arbitrary threshold for correlation strength
+                            relationships.append((col1, col2, {'weight': corr}))
+                # Categorical Co-occurrence
+                elif pd.api.types.is_object_dtype(df[col1]) or pd.api.types.is_object_dtype(df[col2]):
+                    common_values = len(set(df[col1]).intersection(set(df[col2])))
+                    if common_values > 0:
+                        relationships.append((col1, col2, {'weight': common_values}))
+    return relationships
+
     
 # Function to parse query and generate appropriate visualization code
 def parse_query_gpt(file_path, context, query, columns, dtypes, nulls, stats, uniques, shape):
     if context == 'matplotlib':
+        df = preprocess_data(file_path)
+    #    # relationships = identify_relationships(df)
+    #     if is_tree_structure(df):
+    #         print(f"Identified Relationship Tree")
+    #     else:
+    #         print("No hierarchical relationships detected between columns. NO TREE DATA STRUCTURE")
+
+    #     relationships =_graphs(df)
+    #     if relationships:
+    #         print(f"Identified Relationship Graph")
+    #     else:
+    #         print("No hierarchical relationships detected between columns. NO GRAPH DATA STRUCTURE")
+
         print(context)
         prompt = f"""
-        Dataset columns: {columns}
-        Data types: {dtypes}
-        Null values: {nulls}
-        Descriptive stats: {stats}
-        Unique values: {uniques}
-        Shape: {shape}
+        Dataframe: {df}
+        Dataset info: {columns, dtypes, nulls, stats, uniques, shape}
         Query: {query}
-        Provide the appropriate visualization code using either Matplotlib or Plotly to fulfill this query. Ensure to assign the plot object to a variable named 'fig'. Only give code output. Just give specific code in as few lines as possible. Remember that all files are uploaded and saved. No need to import csv file. Remember that file name is {file_path}
-        """
+        Provide the appropriate visualization code using either Matplotlib or Plotly to fulfill this query. Labels and Title should be proper readable and everything should be inside the boundary of graph. The background of graph should be light seagreen color, But the labels in the graph should be in white color and their background should be dark, so user can understand the text labels. (Only for Pie chart: If you are drawing pie chart then use different color combination, but make sure text should be visible and shows what every color represents) Ensure to assign the plot object to a variable named 'fig'. Only give code output. Give clear code that will handle all possible cases, I will not bear any kind of error because this is really serious, Understand. Remember that all files are uploaded and saved. No need to import csv file, it's dataframe is already given to you. Remember that file name is {file_path}
+        I will kick your ass if your code contains any error or did not work properly."""
     elif context == 'pandas':
         print(context)
         prompt = f"""
@@ -307,6 +381,9 @@ def index():
         user_name = 'Current User'
     return render_template('index.html', user_name=user_name)
 
+
+
+
 @app.route('/signup', methods=['POST'])
 def signup():
     username = request.form['username']
@@ -328,6 +405,25 @@ def signup():
 @app.route('/graphs/<path:filename>')
 def serve_image(filename):
     return send_from_directory('graphs', filename)
+
+
+@app.route('/upload', methods=['POST'])
+def upload_file():
+    if 'file' not in request.files:
+        return jsonify({'error': 'No file part'})
+    file = request.files['file']
+    if file.filename == '':
+        return jsonify({'error': 'No selected file'})
+    if file and allowed_file(file.filename):
+        filename = secure_filename(file.filename)
+        file.save(os.path.join(app.config['UPLOAD_FOLDER'], filename))
+        # File successfully uploaded, enable options
+        return jsonify({'success': True, 'message': 'File uploaded successfully'})
+    else:
+        return jsonify({'error': 'Invalid file type'})
+
+def allowed_file(filename):
+    return '.' in filename and filename.rsplit('.', 1)[1].lower() in {'csv'}
 
 
 @app.route('/chat', methods=['POST'])
@@ -429,6 +525,77 @@ def chat():
 
     return jsonify({'response': bot_response})
 
+
+@app.route('/option_action', methods=['POST'])
+def option_action():
+    action = request.json['action']
+    file_path = session.get('file_path')
+    
+    if not file_path:
+        return jsonify({'response': "Please upload a CSV file first."})
+
+    df = pd.read_csv(file_path)
+    
+    if action == "Generate Ideas":
+        prompt = f"""
+        Analyze the following dataset:
+        Columns: {df.columns.tolist()}
+        Data types: {df.dtypes.to_dict()}
+        
+        Please provide:
+        1. Potential relationships between columns
+        2. Suggested types of graphs or visualizations based on the data
+        3. Any interesting patterns or insights that could be explored
+        
+        Give a concise response focusing on the most important points.
+        """
+        response = generate_text(prompt)
+        response = re.sub(r'\*\*(.*?)\*\*', r'<h3>\1</h3>', response )
+        response = response.replace('*', '')
+        
+    elif action == "Visualize Trends":
+        prompt = f"""
+        Based on the following dataset:
+        Columns: {df.columns.tolist()}
+        Data types: {df.dtypes.to_dict()}
+        
+        Generate Python code to create either a pie chart, bar graph, or another appropriate chart that best represents a key trend or relationship in the data. Use either matplotlib or plotly for visualization. Assign the plot to a variable named 'fig'.
+        """
+        response = parse_query_gpt(file_path, 'matplotlib', prompt, df.columns.tolist(), df.dtypes.to_dict(), df.isnull().sum().to_dict(), df.describe().to_dict(), df.nunique().to_dict(), df.shape)
+        result = execute_query(df, response)
+        if result['type'] == 'image':
+            response = f"<img src='{result['content']}' alt='Generated Plot' />"
+        else:
+            response = "Failed to generate visualization. Please try a different request."
+        
+    elif action == "Analyze Data":
+        response = df.head(10).to_html(classes='dataframe', index=False, max_cols=5)
+        #response = df.head(10).to_html(classes='dataframe', index=False)
+        
+    elif action == "Report Insights":
+        prompt = f"""
+        Analyze the following dataset and provide key insights:
+        Columns: {df.columns.tolist()}
+        Data types: {df.dtypes.to_dict()}
+        Shape: {df.shape}
+        Summary statistics: {df.describe().to_dict()}
+        
+        Please provide:
+        1. Overview of the dataset (number of rows, columns, data types)
+        2. Any notable patterns or trends
+        3. Potential data quality issues (missing values, outliers)
+        4. Suggestions for further analysis
+        
+        Give a concise response focusing on the most important points.
+        """
+        response = generate_text(prompt)
+        response = re.sub(r'\*\*(.*?)\*\*', r'<h3>\1</h3>', response )
+        response = response.replace('*', '')
+    
+    else:
+        response = "Invalid action requested."
+
+    return jsonify({'response': response})
 
 
 
