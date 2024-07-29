@@ -25,6 +25,8 @@ from datetime import datetime
 import base64
 from io import BytesIO 
 import matplotlib.pyplot as plt
+import matplotlib
+matplotlib.use('Agg')
 import plotly.express as px
 import plotly.io as pio
 import base64
@@ -57,14 +59,15 @@ app.config['MAIL_SERVER'] = 'smtp.gmail.com'
 app.config['MAIL_PORT'] = 587
 app.config['MAIL_USE_TLS'] = True
 app.config['MAIL_USERNAME'] = 'm.kashi613@gmail.com' # Use an app password
-app.config['MAIL_PASSWORD'] = 'YOUR PASSWORD'
+app.config['MAIL_PASSWORD'] = 'srrp pxgw ixxz rmnh'
 app.config['MAIL_DEFAULT_SENDER'] = ('PlotPal', 'm.kashi613@gmail.com')
 
 mail = Mail(app)
 
+#key for second account backup: 'AIzaSyAO-ux6eN_If4qrEkqk5KjWYE7KbUdwL3s'
 # Set the API key for the generative model
-# os.environ['GOOGLE_API_KEY'] = ''
-os.environ['GOOGLE_API_KEY'] = 'YOUR_API_KEY'
+# os.environ['GOOGLE_API_KEY'] = 'AIzaSyBDclYIUCOkq9gQ8NQwFpJ55mFC-IC3Koo'
+os.environ['GOOGLE_API_KEY'] = 'AIzaSyB8jKo7WqCOQ0Uwrt6JpY7G9uQ0v_5CaM4'
 # Configure the generative AI with the API key
 genai.configure(api_key=os.environ["GOOGLE_API_KEY"])
 
@@ -308,7 +311,7 @@ def parse_query_gpt(file_path, context, query, columns, dtypes, nulls, stats, un
         Dataframe: {df}
         Dataset info: {columns, dtypes, nulls, stats, uniques, shape}
         Query: {query}
-        Provide the appropriate visualization code using either Matplotlib or Plotly to fulfill this query. Labels and Title should be proper readable and everything should be inside the boundary of graph. The background of graph should be light seagreen color, But the labels in the graph should be in white color and their background should be dark, so user can understand the text labels. (Only for Pie chart: If you are drawing pie chart then use different color combination, but make sure text should be visible and shows what every color represents) Ensure to assign the plot object to a variable named 'fig'. Only give code output. Give clear code that will handle all possible cases, I will not bear any kind of error because this is really serious, Understand. Remember that all files are uploaded and saved. No need to import csv file, it's dataframe is already given to you. Remember that file name is {file_path}
+        Provide the appropriate visualization code using only Matplotlib or Plotly library to fulfill this query. Do not use any other library. Labels and Title should be proper readable and everything should be inside the boundary of graph. The figure size must be, Width: 9.5 inches, Height: 6 inches. The background of graph should be light seagreen color, But the labels in the graph should be in white color and their background should be dark, so user can understand the text labels. (Only for Pie chart: If you are drawing pie chart then use different color combination, but make sure text should be visible and shows what every color represents). If graph requires only numerical columns like float or int then ignore all categorical columns for that graph and vice versa. Ensure to assign the plot object to a variable named 'fig'. Only give code output. Give clear code that will handle all possible cases, I will not bear any kind of error because this is really serious, Understand. Remember that all files are uploaded and saved. No need to import csv file, it's dataframe is already given to you. Remember that file name is {file_path}
         I will kick your ass if your code contains any error or did not work properly."""
     elif context == 'pandas':
         print(context)
