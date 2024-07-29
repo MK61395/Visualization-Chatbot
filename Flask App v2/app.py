@@ -59,15 +59,14 @@ app.config['MAIL_SERVER'] = 'smtp.gmail.com'
 app.config['MAIL_PORT'] = 587
 app.config['MAIL_USE_TLS'] = True
 app.config['MAIL_USERNAME'] = 'm.kashi613@gmail.com' # Use an app password
-app.config['MAIL_PASSWORD'] = 'srrp pxgw ixxz rmnh'
+app.config['MAIL_PASSWORD'] = 'YOUR PASSWORD'
 app.config['MAIL_DEFAULT_SENDER'] = ('PlotPal', 'm.kashi613@gmail.com')
 
 mail = Mail(app)
 
-#key for second account backup: 'AIzaSyAO-ux6eN_If4qrEkqk5KjWYE7KbUdwL3s'
 # Set the API key for the generative model
-# os.environ['GOOGLE_API_KEY'] = 'AIzaSyBDclYIUCOkq9gQ8NQwFpJ55mFC-IC3Koo'
-os.environ['GOOGLE_API_KEY'] = 'AIzaSyB8jKo7WqCOQ0Uwrt6JpY7G9uQ0v_5CaM4'
+# os.environ['GOOGLE_API_KEY'] = '-'
+os.environ['GOOGLE_API_KEY'] = 'YOUR_API_KEY'
 # Configure the generative AI with the API key
 genai.configure(api_key=os.environ["GOOGLE_API_KEY"])
 
