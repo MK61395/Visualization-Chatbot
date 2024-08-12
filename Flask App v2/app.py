@@ -31,13 +31,16 @@ import plotly.express as px
 import plotly.io as pio
 import base64
 from PIL import Image
-
 from reportlab.lib import colors
 from reportlab.lib.pagesizes import letter
 from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Image, Table, TableStyle
-from reportlab.lib.styles import getSampleStyleSheet
+from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 from PIL import Image as PILImage
 from bs4 import BeautifulSoup
+from dotenv import load_dotenv
+import os
+
+load_dotenv()
 
 
 
@@ -59,16 +62,22 @@ app.config['MAIL_SERVER'] = 'smtp.gmail.com'
 app.config['MAIL_PORT'] = 587
 app.config['MAIL_USE_TLS'] = True
 app.config['MAIL_USERNAME'] = 'm.kashi613@gmail.com' # Use an app password
-app.config['MAIL_PASSWORD'] = 'YOUR PASSWORD'
+app.config['MAIL_PASSWORD'] = 'srrp pxgw ixxz rmnh'
 app.config['MAIL_DEFAULT_SENDER'] = ('PlotPal', 'm.kashi613@gmail.com')
 
 mail = Mail(app)
 
+#key for second account backup: 'AIzaSyAO-ux6eN_If4qrEkqk5KjWYE7KbUdwL3s'
 # Set the API key for the generative model
-# os.environ['GOOGLE_API_KEY'] = '-'
-os.environ['GOOGLE_API_KEY'] = 'YOUR_API_KEY'
+# os.environ['GOOGLE_API_KEY'] = 'AIzaSyBDclYIUCOkq9gQ8NQwFpJ55mFC-IC3Koo'
+google_api_key = os.getenv('GOOGLE_API_KEY')
+
+# Ensure the API key was loaded successfully
+if not google_api_key:
+    raise ValueError("Google API key not found in environment variables")
+
 # Configure the generative AI with the API key
-genai.configure(api_key=os.environ["GOOGLE_API_KEY"])
+genai.configure(api_key=google_api_key)
 
 # Define the generative model
 generative_model = genai.GenerativeModel('gemini-1.5-flash')
@@ -146,16 +155,7 @@ def generate_text(prompt, retries=3, delay=5):
                 raise
     raise Exception("Max retries exceeded")
 
-'''
-def fig_to_base64(fig):
-    """Convert a matplotlib figure to a base64 encoded string."""
-    buf = BytesIO()
-    fig.savefig(buf, format='png')
-    buf.seek(0)
-    img_base64 = base64.b64encode(buf.read()).decode('utf-8')
-    buf.close()
-    return img_base64
-'''
+
 
 # Function to determine the context of the query
 def ensure_dir(directory):
@@ -305,12 +305,13 @@ def parse_query_gpt(file_path, context, query, columns, dtypes, nulls, stats, un
     #     else:
     #         print("No hierarchical relationships detected between columns. NO GRAPH DATA STRUCTURE")
 
+#  The figure size must be, Width: 9.5 inches, Height: 6 inches. 
         print(context)
         prompt = f"""
         Dataframe: {df}
         Dataset info: {columns, dtypes, nulls, stats, uniques, shape}
         Query: {query}
-        Provide the appropriate visualization code using only Matplotlib or Plotly library to fulfill this query. Do not use any other library. Labels and Title should be proper readable and everything should be inside the boundary of graph. The figure size must be, Width: 9.5 inches, Height: 6 inches. The background of graph should be light seagreen color, But the labels in the graph should be in white color and their background should be dark, so user can understand the text labels. (Only for Pie chart: If you are drawing pie chart then use different color combination, but make sure text should be visible and shows what every color represents). If graph requires only numerical columns like float or int then ignore all categorical columns for that graph and vice versa. Ensure to assign the plot object to a variable named 'fig'. Only give code output. Give clear code that will handle all possible cases, I will not bear any kind of error because this is really serious, Understand. Remember that all files are uploaded and saved. No need to import csv file, it's dataframe is already given to you. Remember that file name is {file_path}
+        Provide the appropriate visualization code using only Matplotlib or Plotly library to fulfill this query. Do not use any other library. Labels and Title should be proper readable and everything should be inside the boundary of graph. The background of graph should be light seagreen color, But the labels in the graph should be in white color and their background should be dark, so user can understand the text labels. (Only for Pie chart: If you are drawing pie chart then use different color combination, but make sure text should be visible and shows what every color represents). If graph requires only numerical columns like float or int then ignore all categorical columns for that graph and vice versa. Ensure to assign the plot object to a variable named 'fig'. Only give code output. Give clear code that will handle all possible cases, I will not bear any kind of error because this is really serious, Understand. Remember that all files are uploaded and saved. No need to import csv file, it's dataframe is already given to you. Remember that file name is {file_path}
         I will kick your ass if your code contains any error or did not work properly."""
     elif context == 'pandas':
         print(context)
@@ -534,9 +535,11 @@ def option_action():
     file_path = session.get('file_path')
     
     if not file_path:
-        return jsonify({'response': "Please upload a CSV file first."})
+        return jsonify({'user_message': action, 'response': "Please upload a CSV file first."})
 
     df = pd.read_csv(file_path)
+    
+    user_message = f"Perform action: {action}"
     
     if action == "Generate Ideas":
         prompt = f"""
@@ -552,7 +555,7 @@ def option_action():
         Give a concise response focusing on the most important points.
         """
         response = generate_text(prompt)
-        response = re.sub(r'\*\*(.*?)\*\*', r'<h3>\1</h3>', response )
+        response = re.sub(r'\*\*(.*?)\*\*', r'<h3>\1</h3>', response)
         response = response.replace('*', '')
         
     elif action == "Visualize Trends":
@@ -572,7 +575,7 @@ def option_action():
         
     elif action == "Analyze Data":
         response = df.head(10).to_html(classes='dataframe', index=False, max_cols=5)
-        #response = df.head(10).to_html(classes='dataframe', index=False)
+        
         
     elif action == "Report Insights":
         prompt = f"""
@@ -591,13 +594,13 @@ def option_action():
         Give a concise response focusing on the most important points.
         """
         response = generate_text(prompt)
-        response = re.sub(r'\*\*(.*?)\*\*', r'<h3>\1</h3>', response )
+        response = re.sub(r'\*\*(.*?)\*\*', r'<h3>\1</h3>', response)
         response = response.replace('*', '')
     
     else:
         response = "Invalid action requested."
 
-    return jsonify({'response': response})
+    return jsonify({'user_message': user_message, 'response': response})
 
 
 
@@ -643,24 +646,36 @@ def save_pdf():
 
         styles = getSampleStyleSheet()
         title_style = styles['Heading1']
-        sender_style = styles['Heading3']
+        heading_style = styles['Heading2']
         normal_style = styles['Normal']
+        sender_style = ParagraphStyle(
+            'SenderStyle',
+            parent=styles['Heading2'],
+            textColor=colors.blue,
+            spaceAfter=6
+        )
 
         # Add title
         elements.append(Paragraph(f"Chat History - Generated on {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}", title_style))
         elements.append(Spacer(1, 12))
 
+        def is_heading(text):
+            # Check if the text is less than 20 characters and ends with a colon
+            return len(text) < 20 and text.strip().endswith(':')
+
         for message in chat_messages:
             sender = message['sender']
             elements.append(Paragraph(f"{sender}:", sender_style))
-            elements.append(Spacer(1, 6))  # Add some space after the sender
 
             if 'text' in message:
                 text = message['text']
                 # Split the text into paragraphs
                 paragraphs = text.split('\n')
                 for para in paragraphs:
-                    elements.append(Paragraph(para, normal_style))
+                    if is_heading(para):
+                        elements.append(Paragraph(para, heading_style))
+                    else:
+                        elements.append(Paragraph(para, normal_style))
                     elements.append(Spacer(1, 3))  # Small space between paragraphs
 
             if 'image' in message:
