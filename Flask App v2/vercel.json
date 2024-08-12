@@ -7,4 +7,3 @@
     { "src": "/(.*)", "dest": "Flask App v2/app.py" }
   ]
 }
-{ "rewrites": [{ "source": "/(.*)", "destination": "/" }] }
