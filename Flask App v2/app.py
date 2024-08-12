@@ -62,7 +62,7 @@ app.config['MAIL_SERVER'] = 'smtp.gmail.com'
 app.config['MAIL_PORT'] = 587
 app.config['MAIL_USE_TLS'] = True
 app.config['MAIL_USERNAME'] = 'm.kashi613@gmail.com' # Use an app password
-app.config['MAIL_PASSWORD'] = 'srrp pxgw ixxz rmnh'
+app.config['MAIL_PASSWORD'] = 'YOUR PASSWORD'
 app.config['MAIL_DEFAULT_SENDER'] = ('PlotPal', 'm.kashi613@gmail.com')
 
 mail = Mail(app)
