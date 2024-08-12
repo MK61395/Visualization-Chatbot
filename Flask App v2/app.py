@@ -359,6 +359,10 @@ def remove_non_printable(text):
 def home():
     return redirect(url_for('login'))
 
+@app.route('/')
+def home():
+    return redirect('/login')
+
 @app.route('/login', methods=['GET', 'POST'])
 def login():
     if request.method == 'POST':
