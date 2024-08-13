@@ -37,10 +37,7 @@ from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Image, Tabl
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 from PIL import Image as PILImage
 from bs4 import BeautifulSoup
-from dotenv import load_dotenv
-import os
 
-load_dotenv()
 
 
 
@@ -67,17 +64,10 @@ app.config['MAIL_DEFAULT_SENDER'] = ('PlotPal', 'm.kashi613@gmail.com')
 
 mail = Mail(app)
 
-#key for second account backup: 'AIzaSyAO-ux6eN_If4qrEkqk5KjWYE7KbUdwL3s'
 # Set the API key for the generative model
-# os.environ['GOOGLE_API_KEY'] = 'AIzaSyBDclYIUCOkq9gQ8NQwFpJ55mFC-IC3Koo'
-google_api_key = os.getenv('GOOGLE_API_KEY')
-
-# Ensure the API key was loaded successfully
-if not google_api_key:
-    raise ValueError("Google API key not found in environment variables")
-
+os.environ['GOOGLE_API_KEY'] = 'YOUR_API_KEY'
 # Configure the generative AI with the API key
-genai.configure(api_key=google_api_key)
+genai.configure(api_key=os.environ["GOOGLE_API_KEY"])
 
 # Define the generative model
 generative_model = genai.GenerativeModel('gemini-1.5-flash')
@@ -358,10 +348,6 @@ def remove_non_printable(text):
 @app.route('/')
 def home():
     return redirect(url_for('login'))
-
-@app.route('/')
-def home():
-    return redirect('/login')
 
 @app.route('/login', methods=['GET', 'POST'])
 def login():
